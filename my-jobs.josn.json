@@ -1,0 +1,306 @@
+{
+  "Bedrock-portfolio-rebalance" : {
+    "Type" : "Folder",
+    "ControlmServer" : "smprod",
+    "OrderMethod" : "Manual",
+    "ActiveRetentionPolicy" : "CleanEndedOK",
+    "CreatedBy" : "michael_oladugba@bmc.com",
+    "Application" : "SM_BEDROCK",
+    "When" : {
+      "RuleBasedCalendars" : {
+        "Included" : [ "EVERYDAY" ],
+        "EVERYDAY" : {
+          "Type" : "Calendar:RuleBased",
+          "When" : {
+            "DaysRelation" : "OR",
+            "WeekDays" : [ "NONE" ],
+            "MonthDays" : [ "ALL" ]
+          }
+        }
+      }
+    },
+    "Amazon_S3_Filewatch" : {
+      "Type" : "Job:FileTransfer",
+      "ConnectionProfileSrc" : "MFTS3",
+      "ConnectionProfileDest" : "AZSMB",
+      "S3BucketNameSrc" : "sp500-lambda-bedrock",
+      "AzureContainerNameDest" : "simplepipeline",
+      "Host" : "zzi-sts-1",
+      "CreatedBy" : "michael_oladugba@bmc.com",
+      "Description" : "Watches s3://sp500-lambda-bedrock/reports/ for new Strategic Rebalance PDFs matching pattern Strategic_Rebalance*.pdf. Succeeds as soon as a matching object is detected. Acts as the gate for the downstream email distribution job, does not transfer the file.",
+      "RunAs" : "MFTS3+AZSMB",
+      "Application" : "SM_BEDROCK",
+      "Variables" : [ {
+        "FTP-LOSTYPE" : "Unix"
+      }, {
+        "FTP-CONNTYPE1" : "S3"
+      }, {
+        "FTP-ROSTYPE" : "Unix"
+      }, {
+        "FTP-RSTORAGETYPE" : "BLOB_STORAGE"
+      }, {
+        "FTP-CONNTYPE2" : "Azure"
+      }, {
+        "FTP-CM_VER" : "9.0.00"
+      }, {
+        "FTP-COMPRESSION11" : "0"
+      }, {
+        "FTP-COMPRESSION21" : "0"
+      }, {
+        "FTP-OVERRIDE_WATCH_INTERVAL1" : "0"
+      }, {
+        "FTP-POSTCMD_ON_FAILURE1" : "0"
+      }, {
+        "FTP-SYNC_DIR_NO_DEL1" : "0"
+      } ],
+      "FileTransfers" : [ {
+        "TransferType" : "Binary",
+        "TransferOption" : "FileWatcher",
+        "Src" : "reports/Strategic_Rebalance_*.pdf",
+        "SRC_PATTERN" : "Wildcard",
+        "ABSTIME" : "0",
+        "TIMELIMIT" : "0",
+        "UNIQUE" : "0",
+        "SRCOPT" : "0",
+        "IF_EXIST" : "0",
+        "DSTOPT" : "0",
+        "ContinueOnFailure" : false,
+        "DeleteFileOnDestIfFails" : false,
+        "FailJobOnDestActionFailure" : false,
+        "FailJobOnSourceCommandFailure" : false,
+        "FailJobOnDestCommandFailure" : false,
+        "RECURSIVE" : "0",
+        "EXCLUDE_WILDCARD" : "0",
+        "TRIM" : "1",
+        "NULLFLDS" : "0",
+        "VERNUM" : "0",
+        "CASEIFS" : "0",
+        "FileWatcherOptions" : {
+          "MinDetectedSizeInBytes" : "0",
+          "UnitsOfTimeLimit" : "Minutes",
+          "SkipToNextFileIfCriteriaNotMatch" : false
+        },
+        "IncrementalTransfer" : {
+          "IncrementalTransferEnabled" : false,
+          "MaxModificationAgeForFirstRunEnabled" : false,
+          "MaxModificationAgeForFirstRunInHours" : "0"
+        },
+        "SimultaneousTransfer" : {
+          "TransferMultipleFilesSimultaneously" : false
+        }
+      } ],
+      "When" : {
+        "WeekDays" : [ "NONE" ],
+        "MonthDays" : [ "ALL" ],
+        "DaysRelation" : "OR"
+      },
+      "eventsToWaitFor" : {
+        "Type" : "WaitForEvents",
+        "Events" : [ {
+          "Event" : "Bedrock-agent-job-TO-mol-test-file-transfer"
+        } ]
+      },
+      "eventsToAdd" : {
+        "Type" : "AddEvents",
+        "Events" : [ {
+          "Order" : "1",
+          "Event" : "mol-test-file-transfer-TO-ses-email-lambda"
+        }, {
+          "Order" : "3",
+          "Event" : "mol-test-file-transfer-TO-ses-email-lambda-145"
+        }, {
+          "Order" : "4",
+          "Event" : "WATCH_REBALANCE_REPORT_S3-TO-Quicksight_Refresh"
+        }, {
+          "Order" : "5",
+          "Event" : "WATCH_REBALANCE_REPORT_S3-TO-EMAIL_REBALANCE_REPORT_SES"
+        } ]
+      },
+      "eventsToDelete" : {
+        "Type" : "DeleteEvents",
+        "Events" : [ {
+          "Order" : "2",
+          "Event" : "Bedrock-agent-job-TO-mol-test-file-transfer"
+        } ]
+      }
+    },
+    "Amazon_SES_Email" : {
+      "Type" : "Job:AWS Lambda",
+      "ConnectionProfile" : "JOG-AWS-LAMBDA-EAST1",
+      "Function Name" : "email-rebalance-report",
+      "Parameters" : "{\"bucket\":\"sp500-lambda-bedrock\",\"prefix\":\"reports/Strategic_Rebalance_\"}",
+      "Append Log to Output" : "unchecked",
+      "Host" : "ip-172-31-42-251:i-0661831b4d1560fc0",
+      "CreatedBy" : "michael_oladugba@bmc.com",
+      "Description" : "Invokes AWS Lambda email-rebalance-report (us-east-1) which fetches the most recent S&P 500 Strategic Rebalance PDF from S3 and emails it to the distribution list via Amazon SES. Runs after WATCH_REBALANCE_REPORT_S3 confirms a new report has landed. Recipients and sender are configured on the Lambda; this job's payload only specifies bucket and prefix.\\n\\n",
+      "RunAs" : "JOG-AWS-LAMBDA-EAST1",
+      "Application" : "SM_BEDROCK",
+      "When" : {
+        "WeekDays" : [ "NONE" ],
+        "MonthDays" : [ "ALL" ],
+        "DaysRelation" : "OR"
+      },
+      "eventsToWaitFor" : {
+        "Type" : "WaitForEvents",
+        "Events" : [ {
+          "Event" : "WATCH_REBALANCE_REPORT_S3-TO-EMAIL_REBALANCE_REPORT_SES"
+        } ]
+      },
+      "eventsToDelete" : {
+        "Type" : "DeleteEvents",
+        "Events" : [ {
+          "Event" : "WATCH_REBALANCE_REPORT_S3-TO-EMAIL_REBALANCE_REPORT_SES"
+        } ]
+      }
+    },
+    "AWS_Quicksight_Refresh" : {
+      "Type" : "Job:AWS QuickSight",
+      "ConnectionProfile" : "AWS-QUICKSIGHT",
+      "Refresh Type" : "Full Refresh",
+      "AWS Dataset ID" : "6e1e33e9-7ac8-4984-9b85-562462f61b57",
+      "Host" : "ip-172-31-40-52:i-07f9d3da7c3b94b10",
+      "CreatedBy" : "sam_durunnebue@bmc.com",
+      "RunAs" : "AWS-QUICKSIGHT",
+      "Application" : "SM_BEDROCK",
+      "When" : {
+        "WeekDays" : [ "NONE" ],
+        "MonthDays" : [ "ALL" ],
+        "DaysRelation" : "OR"
+      },
+      "IfBase:Folder:CompletionStatus_0" : {
+        "Type" : "If:CompletionStatus",
+        "CompletionStatus" : "1",
+        "Action:SetToOK_0" : {
+          "Type" : "Action:SetToOK"
+        }
+      },
+      "eventsToWaitFor" : {
+        "Type" : "WaitForEvents",
+        "Events" : [ {
+          "Event" : "WATCH_REBALANCE_REPORT_S3-TO-Quicksight_Refresh"
+        } ]
+      },
+      "eventsToDelete" : {
+        "Type" : "DeleteEvents",
+        "Events" : [ {
+          "Event" : "STORE_AI_DECISION-TO-Quicksight_Refresh"
+        }, {
+          "Event" : "WATCH_REBALANCE_REPORT_S3-TO-Quicksight_Refresh"
+        } ]
+      }
+    },
+    "Bedrock_Portfolio_Agent" : {
+      "Type" : "Job:AWS Bedrock",
+      "ConnectionProfile" : "MOL-BEDROCK-CP",
+      "Flow Id" : "DGKVCDC2U0",
+      "Alias" : "TSTALIASID",
+      "Flow Text Input" : "\"The Q1 2026 data is staged in S3 (using the file Current_Portfolio.csv). Conduct a fragility benchmark against the 2018 stress period and generate a PDF strategic rebalancing proposal for Q2. I need to see the chart of recommended sector shifts both here and inside the PDF; please render all charts at 100 DPI to ensure the PDF is optimized for archival. Finally, archive that PDF to S3 via the ReportArchiver tool and provide me with the exact secure download link.\"%4E",
+      "Input Node Name" : "FlowInputNode",
+      "Initial Node Output Name" : "document",
+      "Latency" : "Standard",
+      "Show Execution Events" : "checked",
+      "Host" : "ip-172-31-40-52:i-07f9d3da7c3b94b10",
+      "CreatedBy" : "michael_oladugba@bmc.com",
+      "Description" : "Runs the Bedrock AI analysis workflow using the market snapshot and portfolio data, generates strategic rebalance recommendations, and creates the PDF repo",
+      "RunAs" : "MOL-BEDROCK-CP",
+      "Application" : "SM_BEDROCK",
+      "When" : {
+        "WeekDays" : [ "NONE" ],
+        "MonthDays" : [ "ALL" ],
+        "DaysRelation" : "OR"
+      },
+      "eventsToWaitFor" : {
+        "Type" : "WaitForEvents",
+        "Events" : [ {
+          "Event" : "DataBrew_Validation_Job-TO-Bedrock-agent-job"
+        } ]
+      },
+      "eventsToAdd" : {
+        "Type" : "AddEvents",
+        "Events" : [ {
+          "Order" : "1",
+          "Event" : "AWS_Bedrock_Job_Mol-TO-lambda-job"
+        }, {
+          "Order" : "4",
+          "Event" : "Bedrock-agent-job-TO-STORE_AI_DECISION"
+        }, {
+          "Order" : "5",
+          "Event" : "Bedrock-agent-job-TO-Quicksight_Refresh"
+        }, {
+          "Order" : "6",
+          "Event" : "Bedrock-agent-job-TO-mol-test-file-transfer"
+        } ]
+      },
+      "eventsToDelete" : {
+        "Type" : "DeleteEvents",
+        "Events" : [ {
+          "Order" : "2",
+          "Event" : "SNOWFLAKE_EXPORT_TO_S3-TO-AWS_Bedrock_Job_Mol"
+        }, {
+          "Order" : "3",
+          "Event" : "Databases_Job-TO-Bedrock-agent-job"
+        }, {
+          "Order" : "7",
+          "Event" : "DataBrew_Validation_Job-TO-Bedrock-agent-job"
+        } ]
+      }
+    },
+    "DataBrew_Validation" : {
+      "Type" : "Job:AWS Glue DataBrew",
+      "ConnectionProfile" : "AWS_GLUE_DATABREW",
+      "Output Job Logs" : "checked",
+      "Job Name" : "AI-Ready-Validation-Recipe",
+      "Host" : "ip-172-31-40-52:i-07f9d3da7c3b94b10",
+      "CreatedBy" : "ferwa_zaidi@bmc.com",
+      "Description" : "Validates AI-ready S&P 500 market snapshot data before Bedrock analysis.",
+      "RunAs" : "AWS_GLUE_DATABREW",
+      "Application" : "SM_BEDROCK",
+      "When" : {
+        "WeekDays" : [ "NONE" ],
+        "MonthDays" : [ "ALL" ],
+        "DaysRelation" : "OR"
+      },
+      "eventsToWaitFor" : {
+        "Type" : "WaitForEvents",
+        "Events" : [ {
+          "Event" : "Database_Job-TO-DataBrew_Validation_Job"
+        } ]
+      },
+      "eventsToAdd" : {
+        "Type" : "AddEvents",
+        "Events" : [ {
+          "Event" : "DataBrew_Validation_Job-TO-Bedrock-agent-job"
+        } ]
+      },
+      "eventsToDelete" : {
+        "Type" : "DeleteEvents",
+        "Events" : [ {
+          "Event" : "Database_Job-TO-DataBrew_Validation_Job"
+        } ]
+      }
+    },
+    "Snowflake_Extract_SP500" : {
+      "Type" : "Job:Database:EmbeddedQuery",
+      "Query" : "USE SCHEMA SP500_CURATED.MARKET;\\n\\nCOPY INTO @SP500_CURATED.GOVERNANCE.SP500_S3_STAGE/market_snapshot.json\\nFROM (\\n    SELECT ARRAY_AGG(\\n        OBJECT_CONSTRUCT(\\n            'date', DATE,\\n            'risk_score', RISK_SCORE,\\n            'vol_change', VOL_CHANGE,\\n            'breadth_change', BREADTH_CHANGE,\\n            'avg_volatility', AVG_VOLATILITY,\\n            'pct_overbought', PCT_OVERBOUGHT,\\n            'return_dispersion', RETURN_DISPERSION,\\n            'dispersion_change', DISPERSION_CHANGE,\\n            'pct_above_ma30', PCT_ABOVE_MA30,\\n            'avg_bb_width', AVG_BB_WIDTH\\n        )\\n    ) AS market_data\\n    FROM SP500_CURATED.MARKET.VW_MARKET_TREND_CONTEXT\\n)\\nFILE_FORMAT = (TYPE = 'JSON' COMPRESSION = NONE)\\nOVERWRITE = TRUE\\nSINGLE = TRUE;",
+      "ConnectionProfile" : "SNOWFLAKE_TEST_PAT",
+      "Host" : "ip-172-31-40-52:i-07f9d3da7c3b94b10",
+      "CreatedBy" : "michael_oladugba@bmc.com",
+      "Description" : "The database job extracts curated S&P 500 market analytics from Snowflake, converts them into a single structured JSON snapshot, and pushes that file to S3 for the Bedrock agent to analyze.",
+      "RunAs" : "SNOWFLAKE_TEST_PAT",
+      "Application" : "SM_BEDROCK",
+      "When" : {
+        "WeekDays" : [ "NONE" ],
+        "MonthDays" : [ "ALL" ],
+        "DaysRelation" : "OR"
+      },
+      "eventsToAdd" : {
+        "Type" : "AddEvents",
+        "Events" : [ {
+          "Event" : "Databases_Job-TO-Bedrock-agent-job"
+        }, {
+          "Event" : "Database_Job-TO-DataBrew_Validation_Job"
+        } ]
+      }
+    }
+  }
+}
